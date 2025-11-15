@@ -136,7 +136,7 @@ export async function createLoan(
 
   const totalDue = amount * (1 + interestRate);
   const dueDate = new Date();
-  dueDate.setDate(dueDate.getDate() + 30); // 30-day loan term
+  dueDate.setSeconds(dueDate.getSeconds() + 10); // 10-second loan term for demo
 
   const { data, error } = await supabase
     .from('loans')

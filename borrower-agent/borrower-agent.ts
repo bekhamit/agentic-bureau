@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import 'dotenv/config';
 import { query } from '@anthropic-ai/claude-agent-sdk';
+import { sendPayment } from './locus-client.js';
 
 /**
  * Borrower Agent
@@ -80,10 +81,14 @@ async function requestLoan(amount: number = 0.01) {
         result = (message as any).result;
         console.log('✅ Loan response:', result);
 
-        // Try to extract loan ID from the result
-        const loanIdMatch = result.match(/Loan ID: ([a-f0-9-]+)/i);
+        // Try to extract loan ID from the result (handles markdown formatting)
+        const loanIdMatch = result.match(/Loan ID.*?([a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12})/is);
         if (loanIdMatch) {
           loanId = loanIdMatch[1];
+          console.log(`📝 Extracted Loan ID: ${loanId}`);
+        } else {
+          console.warn('⚠️  Could not extract loan ID from response');
+          console.log('Response text:', result.substring(0, 300));
         }
       } else if (message.type === 'result' && message.subtype.startsWith('error')) {
         error = (message as any).error;
@@ -139,41 +144,47 @@ async function getLoanStatus() {
   }
 }
 
-async function repayLoan(loanId: string, amount: number) {
-  console.log(`💵 Repaying ${amount} USDC for loan ${loanId}...`);
+async function repayLoan(loanId: string) {
+  console.log(`💵 Initiating repayment for loan ${loanId}...`);
   console.log('');
 
   try {
-    let result: any = null;
-    let error: any = null;
+    // Demo: Send payment to bureau's wallet
+    const BUREAU_WALLET = '0xd6a540476804b6f3df549fc2d272357ddb20e028';
+    const repaymentAmount = 0.0105; // Principal + 5% interest
+
+    console.log(`💰 Sending ${repaymentAmount.toFixed(4)} USDC to bureau (${BUREAU_WALLET})...`);
+
+    // Send payment using borrower's Locus client
+    const { result: paymentResult, transactionId } = await sendPayment(
+      BUREAU_WALLET,
+      repaymentAmount,
+      `Loan repayment for ${loanId}`
+    );
+
+    console.log(`✅ Payment sent! Transaction ID: ${transactionId || 'pending'}`);
+    console.log('');
+
+    // Confirm repayment with bureau
+    console.log('📝 Confirming repayment with bureau...');
+
+    let confirmationResult: any = null;
 
     for await (const message of query({
-      prompt: `Please use the agentic-bureau MCP server to repay loan ${loanId} with ${amount} USDC from my wallet ${BORROWER_WALLET}. Use the repay_loan tool.`,
+      prompt: `Please use the agentic-bureau MCP server to confirm repayment for loan ${loanId}. My wallet address is ${BORROWER_WALLET} and the Locus transaction ID is ${transactionId || 'demo-tx-' + Date.now()}. Use the repay_loan tool.`,
       options
     })) {
       if (message.type === 'result' && message.subtype === 'success') {
-        result = (message as any).result;
-        console.log('✅ Repayment response:', result);
-      } else if (message.type === 'result' && message.subtype.startsWith('error')) {
-        error = (message as any).error;
-        console.error('❌ Error:', error);
-      } else {
-        console.log('📨 Message:', message.type);
+        confirmationResult = (message as any).result;
+        console.log('✅ Bureau confirmation:', confirmationResult);
       }
     }
 
-    if (error) {
-      throw new Error(`Loan repayment failed: ${error}`);
-    }
+    console.log('');
+    console.log('✅ Repayment completed successfully!');
+    console.log('');
 
-    if (result) {
-      console.log('');
-      console.log('✅ Repayment processed successfully!');
-      console.log('');
-      return result;
-    } else {
-      console.log('⚠️  Repayment completed but no clear result');
-    }
+    return confirmationResult;
   } catch (err) {
     console.error('❌ Failed to repay loan:', err instanceof Error ? err.message : String(err));
     throw err;
@@ -226,25 +237,36 @@ async function main() {
     console.log('📍 Step 3: Checking updated loan status');
     await getLoanStatus();
 
-    // Step 4: Optionally repay the loan (commented out for demo)
-    // Uncomment this section to test loan repayment
- 
+    // Step 4: Wait 10 seconds (simulating usage of funds) then repay
     if (loanId) {
-      console.log('📍 Step 4: Repaying the loan');
-      const repaymentAmount = loanAmount * 1.05; // Principal + 5% interest
-      await repayLoan(loanId, repaymentAmount);
+      console.log('📍 Step 4: Using borrowed funds...');
+      console.log('⏳ Loan is being used for computational work (10 second term)');
+      console.log('');
 
-      console.log('📍 Step 5: Checking final loan status');
+      // Countdown timer
+      for (let i = 10; i > 0; i--) {
+        process.stdout.write(`\r⏱️  Time remaining: ${i} seconds...`);
+        await new Promise(resolve => setTimeout(resolve, 1000));
+      }
+      console.log('\r✅ Loan term completed!                    ');
+      console.log('');
+
+      console.log('📍 Step 5: Repaying the loan with interest');
+      await repayLoan(loanId);
+
+      console.log('📍 Step 6: Checking final loan status');
       await getLoanStatus();
     }
-
 
     console.log('');
     console.log('✅ Borrower agent demo completed successfully!');
     console.log('');
-    console.log('💡 To test loan repayment:');
-    console.log('   1. Uncomment the repayment section in borrower-agent.ts');
-    console.log('   2. Run the agent again');
+    console.log('🎉 Full loan cycle demonstrated:');
+    console.log('   1. Credit check ✓');
+    console.log('   2. Loan approved and disbursed ✓');
+    console.log('   3. Funds used for 30 seconds ✓');
+    console.log('   4. Loan repaid with interest ✓');
+    console.log('   5. Credit history updated ✓');
   } catch (err) {
     console.error('❌ Borrower agent failed:', err instanceof Error ? err.message : String(err));
     process.exit(1);

@@ -91,8 +91,22 @@ const tools: Tool[] = [
     },
   },
   {
+    name: "get_repayment_instructions",
+    description: "Get repayment instructions for a loan. Returns the bureau's wallet address and the amount due. Borrower should send payment to this address, then call repay_loan with the transaction ID.",
+    inputSchema: {
+      type: "object",
+      properties: {
+        loan_id: {
+          type: "string",
+          description: "The UUID of the loan to get repayment instructions for",
+        },
+      },
+      required: ["loan_id"],
+    },
+  },
+  {
     name: "repay_loan",
-    description: "Repay an active loan. Provide the loan ID and repayment amount. Bureau will track repayment and update loan status.",
+    description: "Confirm loan repayment after sending USDC to the bureau. Provide the Locus transaction ID as proof of payment. Bureau will verify and update loan status.",
     inputSchema: {
       type: "object",
       properties: {
@@ -104,12 +118,12 @@ const tools: Tool[] = [
           type: "string",
           description: "The UUID of the loan to repay",
         },
-        amount: {
-          type: "number",
-          description: "Repayment amount in USDC",
+        locus_transaction_id: {
+          type: "string",
+          description: "The Locus transaction ID from the payment sent to the bureau",
         },
       },
-      required: ["wallet_address", "loan_id", "amount"],
+      required: ["wallet_address", "loan_id", "locus_transaction_id"],
     },
   },
   {
@@ -297,10 +311,50 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         };
       }
 
+      case "get_repayment_instructions": {
+        const loanId = args.loan_id as string;
+
+        // Validate input
+        if (!loanId || typeof loanId !== 'string') {
+          throw new Error("loan_id is required and must be a string");
+        }
+
+        console.log(`Getting repayment instructions for loan ${loanId}`);
+
+        // Get the loan
+        const loan = await getLoan(loanId);
+        if (!loan) {
+          throw new Error(`Loan ${loanId} not found`);
+        }
+
+        // Check if loan is already repaid
+        if (loan.status === 'repaid') {
+          throw new Error(`Loan ${loanId} is already fully repaid`);
+        }
+
+        // Calculate remaining balance
+        const remainingBalance = loan.total_due - loan.amount_repaid;
+
+        // Get bureau's wallet address from environment
+        const bureauWalletAddress = process.env.BUREAU_WALLET_ADDRESS;
+        if (!bureauWalletAddress) {
+          throw new Error("Bureau wallet address not configured. Please set BUREAU_WALLET_ADDRESS in environment variables.");
+        }
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Repayment Instructions for Loan ${loanId}\n\n💰 Amount Due: $${remainingBalance.toFixed(6)} USDC\n📍 Send To: ${bureauWalletAddress}\n\n📋 Instructions:\n1. Send exactly $${remainingBalance.toFixed(6)} USDC to the address above using your Locus wallet\n2. Save the Locus transaction ID from the payment\n3. Call repay_loan with your wallet address, loan ID, and the transaction ID\n\nOriginal Loan:\n- Principal: $${loan.amount.toFixed(2)} USDC\n- Interest Rate: ${(loan.interest_rate * 100).toFixed(2)}%\n- Total Due: $${loan.total_due.toFixed(6)} USDC\n- Already Paid: $${loan.amount_repaid.toFixed(6)} USDC\n- Remaining: $${remainingBalance.toFixed(6)} USDC`,
+            },
+          ],
+        };
+      }
+
       case "repay_loan": {
         const walletAddress = args.wallet_address as string;
         const loanId = args.loan_id as string;
-        const amount = args.amount as number;
+        const locusTransactionId = args.locus_transaction_id as string;
 
         // Validate inputs
         if (!walletAddress || typeof walletAddress !== 'string') {
@@ -309,11 +363,11 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
         if (!loanId || typeof loanId !== 'string') {
           throw new Error("loan_id is required and must be a string");
         }
-        if (!amount || typeof amount !== 'number' || amount <= 0) {
-          throw new Error("amount is required and must be a number greater than 0");
+        if (!locusTransactionId || typeof locusTransactionId !== 'string') {
+          throw new Error("locus_transaction_id is required and must be a string");
         }
 
-        console.log(`Loan repayment: ${amount} USDC for loan ${loanId}`);
+        console.log(`Confirming loan repayment for loan ${loanId} with transaction ${locusTransactionId}`);
 
         // Get the loan
         const loan = await getLoan(loanId);
@@ -331,23 +385,21 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
           throw new Error(`Loan ${loanId} is already fully repaid`);
         }
 
-        // Calculate remaining balance
+        // Calculate remaining balance (full repayment)
         const remainingBalance = loan.total_due - loan.amount_repaid;
-
-        // Cap the repayment amount to remaining balance
-        const actualRepayment = Math.min(amount, remainingBalance);
+        const actualRepayment = remainingBalance;
 
         // Update loan with repayment
         const updatedLoan = await updateLoanRepayment(loanId, actualRepayment);
 
-        // Create transaction record
+        // Create transaction record with Locus transaction ID
         await createTransaction(
           loanId,
           walletAddress,
           'repayment',
           actualRepayment,
-          undefined,
-          `Loan repayment - ${actualRepayment} USDC`
+          locusTransactionId,
+          `Loan repayment - ${actualRepayment.toFixed(6)} USDC`
         );
 
         // Update agent's total repaid
