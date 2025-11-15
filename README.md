@@ -56,7 +56,7 @@ ANTHROPIC_API_KEY=your_anthropic_api_key_here
 
 ## Running as MCP Server
 
-### Option 1: Direct Execution
+### Option 1: Local stdio (Single Computer)
 
 Run the MCP server directly:
 ```bash
@@ -65,7 +65,53 @@ npm run server
 
 The server will start and communicate via stdio (standard input/output).
 
-### Option 2: Configure with Claude Desktop
+### Option 2: HTTP Server (Multi-Computer / Demo)
+
+Run the MCP server as an HTTP service for multi-laptop demos:
+
+```bash
+npm run server:http
+```
+
+The server will start on `http://localhost:8080` by default.
+
+**For Demo/Hosting:**
+
+**Using ngrok (Quick Public URL):**
+```bash
+# Terminal 1: Start MCP server
+npm run server:http
+
+# Terminal 2: Expose publicly
+npx ngrok http 8080
+# Copy the https://xxx.ngrok.io URL
+```
+
+**Using Local Network (Same WiFi):**
+```bash
+# Find your local IP
+ipconfig getifaddr en0  # macOS
+# Or: hostname -I          # Linux
+
+# Start server
+npm run server:http
+
+# Other laptops connect to: http://YOUR_IP:8080/sse
+```
+
+**Configure Claude Desktop (for HTTP server):**
+```json
+{
+  "mcpServers": {
+    "agentic-bureau": {
+      "url": "http://localhost:8080/sse"
+      // or "https://your-ngrok-url.ngrok.io/sse"
+    }
+  }
+}
+```
+
+### Option 3: Configure with Claude Desktop (stdio)
 
 Add this server to your Claude Desktop configuration:
 

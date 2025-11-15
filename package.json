@@ -12,6 +12,7 @@
     "start": "tsx index.ts",
     "dev": "tsx watch index.ts",
     "server": "tsx src/server.ts",
+    "server:http": "tsx src/http-server.ts",
     "build": "tsc",
     "type-check": "tsc --noEmit"
   },
@@ -38,7 +39,9 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.1.0",
     "@modelcontextprotocol/sdk": "^1.22.0",
-    "dotenv": "^16.4.5"
+    "@types/express": "^5.0.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",
