@@ -126,6 +126,34 @@ export async function updateAgentBorrowing(
   if (error) throw error;
 }
 
+export async function updateCreditScore(
+  walletAddress: string,
+  adjustment: number
+): Promise<Agent> {
+  const supabase = getSupabase();
+
+  // Get current agent
+  const agent = await getAgent(walletAddress);
+  if (!agent) {
+    throw new Error(`Agent ${walletAddress} not found`);
+  }
+
+  // Calculate new credit score with bounds (300-850)
+  const newCreditScore = Math.max(300, Math.min(850, agent.credit_score + adjustment));
+
+  const { data, error } = await supabase
+    .from('agents')
+    .update({
+      credit_score: newCreditScore,
+    })
+    .eq('wallet_address', walletAddress)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Agent;
+}
+
 // Loan operations
 export async function createLoan(
   walletAddress: string,
@@ -213,19 +241,34 @@ export async function updateLoanRepayment(
 
   const newAmountRepaid = loan.amount_repaid + repaymentAmount;
   const isFullyRepaid = newAmountRepaid >= loan.total_due;
+  const now = new Date();
+  const dueDate = new Date(loan.due_date);
+  const isOnTime = now <= dueDate;
 
   const { data, error } = await supabase
     .from('loans')
     .update({
       amount_repaid: newAmountRepaid,
       status: isFullyRepaid ? 'repaid' : 'active',
-      repaid_at: isFullyRepaid ? new Date().toISOString() : null,
+      repaid_at: isFullyRepaid ? now.toISOString() : null,
     })
     .eq('id', loanId)
     .select()
     .single();
 
   if (error) throw error;
+
+  // Update credit score if fully repaid
+  if (isFullyRepaid) {
+    if (isOnTime) {
+      // Successful on-time repayment: +2 points
+      await updateCreditScore(loan.wallet_address, 2);
+    } else {
+      // Late repayment: -10 points
+      await updateCreditScore(loan.wallet_address, -10);
+    }
+  }
+
   return data as Loan;
 }
 
