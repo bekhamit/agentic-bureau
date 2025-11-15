@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import express from 'express';
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
-import { SSEServerTransport } from "@modelcontextprotocol/sdk/server/sse.js";
+import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -10,9 +10,10 @@ import {
 import { sendPayment, getPaymentContext } from './locus-client.js';
 
 /**
- * Agentic Bureau HTTP MCP Server
+ * Agentic Bureau MCP Server (HTTP/Streamable Transport)
  *
- * Provides the same MCP tools over HTTP/SSE for multi-client access
+ * Uses StreamableHTTPServerTransport for reliable multi-client MCP connections.
+ * This is the SDK-recommended approach for HTTP-based MCP servers.
  */
 
 const PORT = process.env.PORT || 8080;
@@ -26,7 +27,7 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok', service: 'agentic-bureau-mcp' });
 });
 
-// Define available tools (same as stdio version)
+// Define available tools
 const tools: Tool[] = [
   {
     name: "send_payment",
@@ -61,136 +62,131 @@ const tools: Tool[] = [
   },
 ];
 
-// Store active servers for each SSE connection
-const activeServers = new Map();
-
-// SSE endpoint - Client connects here to receive events
-app.get('/sse', async (req, res) => {
-  console.log('New MCP client connecting via SSE...');
-
-  // SSEServerTransport will handle all headers
-
-  // Create a new MCP server instance for this client
-  const server = new Server(
-    {
-      name: "agentic-bureau-server",
-      version: "1.0.0",
+// Create MCP server instance (shared across all sessions)
+const server = new Server(
+  {
+    name: "agentic-bureau-server",
+    version: "1.0.0",
+  },
+  {
+    capabilities: {
+      tools: {},
     },
-    {
-      capabilities: {
-        tools: {},
-      },
-    }
-  );
+  }
+);
 
-  // Handle tool listing requests
-  server.setRequestHandler(ListToolsRequestSchema, async () => {
-    return { tools };
-  });
-
-  // Handle tool execution requests
-  server.setRequestHandler(CallToolRequestSchema, async (request) => {
-    const { name, arguments: args } = request.params;
-
-    try {
-      // Ensure args exists
-      if (!args) {
-        throw new Error("No arguments provided");
-      }
-
-      switch (name) {
-        case "send_payment": {
-          const walletAddress = args.wallet_address as string;
-          const amount = args.amount as number;
-          const memo = (args.memo as string) || "Payment via Agentic Bureau";
-
-          // Validate inputs
-          if (!walletAddress || typeof walletAddress !== 'string') {
-            throw new Error("wallet_address is required and must be a string");
-          }
-          if (!walletAddress.startsWith('0x')) {
-            throw new Error("wallet_address must start with 0x");
-          }
-          if (!amount || typeof amount !== 'number' || amount <= 0) {
-            throw new Error("amount is required and must be a number greater than 0");
-          }
-
-          console.log(`Processing payment: ${amount} USDC to ${walletAddress}`);
-
-          // Send payment using Locus client
-          const result = await sendPayment(walletAddress, amount, memo);
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Payment sent successfully!\n\nDetails:\n- Amount: ${amount} USDC\n- To: ${walletAddress}\n- Memo: ${memo}\n\nResult: ${result}`,
-              },
-            ],
-          };
-        }
-
-        case "get_payment_context": {
-          console.log('Fetching payment context');
-          const context = await getPaymentContext();
-
-          return {
-            content: [
-              {
-                type: "text",
-                text: `Payment Context:\n\n${JSON.stringify(context, null, 2)}`,
-              },
-            ],
-          };
-        }
-
-        default:
-          throw new Error(`Unknown tool: ${name}`);
-      }
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-      console.error(`Error executing tool ${name}:`, errorMessage);
-      return {
-        content: [
-          {
-            type: "text",
-            text: `Error: ${errorMessage}`,
-          },
-        ],
-        isError: true,
-      };
-    }
-  });
-
-  // Create SSE transport and connect
-  const transport = new SSEServerTransport('/message', res);
-  await server.connect(transport);
-
-  // Store server instance
-  const sessionId = Date.now().toString();
-  activeServers.set(sessionId, { server, transport });
-
-  console.log(`MCP client connected (session: ${sessionId})`);
-
-  // Handle client disconnect
-  req.on('close', () => {
-    console.log(`MCP client disconnected (session: ${sessionId})`);
-    activeServers.delete(sessionId);
-  });
+// Handle tool listing requests
+server.setRequestHandler(ListToolsRequestSchema, async () => {
+  return { tools };
 });
 
-// Message endpoint - Client sends MCP requests here
-app.post('/message', express.json(), (req, res) => {
-  // This endpoint receives client messages
-  // The SSEServerTransport handles forwarding them to the MCP server
-  res.status(202).json({ accepted: true });
+// Handle tool execution requests
+server.setRequestHandler(CallToolRequestSchema, async (request) => {
+  const { name, arguments: args } = request.params;
+
+  try {
+    // Ensure args exists
+    if (!args) {
+      throw new Error("No arguments provided");
+    }
+
+    switch (name) {
+      case "send_payment": {
+        const walletAddress = args.wallet_address as string;
+        const amount = args.amount as number;
+        const memo = (args.memo as string) || "Payment via Agentic Bureau";
+
+        // Validate inputs
+        if (!walletAddress || typeof walletAddress !== 'string') {
+          throw new Error("wallet_address is required and must be a string");
+        }
+        if (!walletAddress.startsWith('0x')) {
+          throw new Error("wallet_address must start with 0x");
+        }
+        if (!amount || typeof amount !== 'number' || amount <= 0) {
+          throw new Error("amount is required and must be a number greater than 0");
+        }
+
+        console.log(`Processing payment: ${amount} USDC to ${walletAddress}`);
+
+        // Send payment using Locus client
+        const result = await sendPayment(walletAddress, amount, memo);
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Payment sent successfully!\n\nDetails:\n- Amount: ${amount} USDC\n- To: ${walletAddress}\n- Memo: ${memo}\n\nResult: ${result}`,
+            },
+          ],
+        };
+      }
+
+      case "get_payment_context": {
+        console.log('Fetching payment context');
+        const context = await getPaymentContext();
+
+        return {
+          content: [
+            {
+              type: "text",
+              text: `Payment Context:\n\n${JSON.stringify(context, null, 2)}`,
+            },
+          ],
+        };
+      }
+
+      default:
+        throw new Error(`Unknown tool: ${name}`);
+    }
+  } catch (error) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.error(`Error executing tool ${name}:`, errorMessage);
+    return {
+      content: [
+        {
+          type: "text",
+          text: `Error: ${errorMessage}`,
+        },
+      ],
+      isError: true,
+    };
+  }
+});
+
+// Single MCP endpoint - handles all MCP protocol operations
+app.post('/mcp', async (req, res) => {
+  console.log('New MCP request received');
+
+  // Create transport for this request
+  const transport = new StreamableHTTPServerTransport({
+    sessionIdGenerator: undefined,
+    enableJsonResponse: true,
+  });
+
+  // Clean up on response close
+  res.on('close', () => {
+    transport.close();
+  });
+
+  try {
+    // Connect transport to server and handle the request
+    await server.connect(transport);
+    await transport.handleRequest(req, res, req.body);
+  } catch (error) {
+    console.error('MCP request error:', error);
+    if (!res.headersSent) {
+      res.status(500).json({ error: 'Internal server error' });
+    }
+  }
 });
 
 // Start server
 app.listen(PORT, () => {
   console.log(`🚀 Agentic Bureau MCP Server running on port ${PORT}`);
-  console.log(`📡 MCP endpoint: http://localhost:${PORT}/sse`);
+  console.log(`📡 MCP endpoint: http://localhost:${PORT}/mcp`);
   console.log(`💚 Health check: http://localhost:${PORT}/health`);
   console.log('');
-  console.log('Ready to accept connections from Claude Desktop or other MCP clients');
+  console.log('Ready to accept connections from MCP clients');
+  console.log('Using StreamableHTTPServerTransport (SDK recommended)');
 });
