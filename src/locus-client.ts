@@ -1,0 +1,146 @@
+import 'dotenv/config';
+import { query } from '@anthropic-ai/claude-agent-sdk';
+
+/**
+ * Sends a USDC payment to a wallet address using the Locus MCP server
+ * @param walletAddress - The destination wallet address (0x...)
+ * @param amount - Amount of USDC to send
+ * @param memo - Optional payment memo/description
+ * @returns Promise that resolves with the payment result
+ */
+export async function sendPayment(
+  walletAddress: string,
+  amount: number,
+  memo: string = 'Payment via Locus Bank MCP'
+): Promise<string> {
+  // Validate inputs
+  if (!walletAddress || !walletAddress.startsWith('0x')) {
+    throw new Error('Invalid wallet address. Must start with 0x');
+  }
+  if (amount <= 0) {
+    throw new Error('Amount must be greater than 0');
+  }
+  if (!process.env.LOCUS_API_KEY) {
+    throw new Error('LOCUS_API_KEY not found in environment variables');
+  }
+  if (!process.env.ANTHROPIC_API_KEY) {
+    throw new Error('ANTHROPIC_API_KEY not found in environment variables');
+  }
+
+  // Configure MCP connection to Locus
+  const mcpServers = {
+    'locus': {
+      type: 'http' as const,
+      url: 'https://mcp.paywithlocus.com/mcp',
+      headers: {
+        'Authorization': `Bearer ${process.env.LOCUS_API_KEY}`
+      }
+    }
+  };
+
+  const options = {
+    mcpServers,
+    allowedTools: [
+      'mcp__locus__*',
+      'mcp__list_resources',
+      'mcp__read_resource'
+    ],
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    canUseTool: async (toolName: string, input: Record<string, unknown>) => {
+      if (toolName.startsWith('mcp__locus__')) {
+        return {
+          behavior: 'allow' as const,
+          updatedInput: input
+        };
+      }
+      return {
+        behavior: 'deny' as const,
+        message: 'Only Locus tools are allowed'
+      };
+    }
+  };
+
+  // Execute payment via Claude Agent SDK
+  let paymentResult: any = null;
+  let error: any = null;
+
+  try {
+    for await (const message of query({
+      prompt: `Please send ${amount} USDC to the wallet address ${walletAddress} with the memo "${memo}"`,
+      options
+    })) {
+      if (message.type === 'result' && message.subtype === 'success') {
+        paymentResult = (message as any).result;
+      } else if (message.type === 'result' && message.subtype === 'error') {
+        error = (message as any).error;
+      }
+    }
+  } catch (err) {
+    throw new Error(`Failed to send payment: ${err instanceof Error ? err.message : String(err)}`);
+  }
+
+  if (error) {
+    throw new Error(`Payment failed: ${error}`);
+  }
+
+  if (!paymentResult) {
+    throw new Error('Payment execution completed but no result was returned');
+  }
+
+  return paymentResult;
+}
+
+/**
+ * Gets the payment context from Locus (budget status, whitelisted contacts)
+ * @returns Promise that resolves with the payment context
+ */
+export async function getPaymentContext(): Promise<any> {
+  if (!process.env.LOCUS_API_KEY || !process.env.ANTHROPIC_API_KEY) {
+    throw new Error('Required API keys not found in environment variables');
+  }
+
+  const mcpServers = {
+    'locus': {
+      type: 'http' as const,
+      url: 'https://mcp.paywithlocus.com/mcp',
+      headers: {
+        'Authorization': `Bearer ${process.env.LOCUS_API_KEY}`
+      }
+    }
+  };
+
+  const options = {
+    mcpServers,
+    allowedTools: [
+      'mcp__locus__*',
+      'mcp__list_resources',
+      'mcp__read_resource'
+    ],
+    apiKey: process.env.ANTHROPIC_API_KEY,
+    canUseTool: async (toolName: string, input: Record<string, unknown>) => {
+      if (toolName.startsWith('mcp__locus__')) {
+        return {
+          behavior: 'allow' as const,
+          updatedInput: input
+        };
+      }
+      return {
+        behavior: 'deny' as const,
+        message: 'Only Locus tools are allowed'
+      };
+    }
+  };
+
+  let result: any = null;
+
+  for await (const message of query({
+    prompt: 'Please get my payment context including budget status and whitelisted contacts',
+    options
+  })) {
+    if (message.type === 'result' && message.subtype === 'success') {
+      result = (message as any).result;
+    }
+  }
+
+  return result;
+}
