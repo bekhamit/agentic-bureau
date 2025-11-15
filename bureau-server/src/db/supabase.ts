@@ -243,7 +243,9 @@ export async function updateLoanRepayment(
   const isFullyRepaid = newAmountRepaid >= loan.total_due;
   const now = new Date();
   const dueDate = new Date(loan.due_date);
-  const isOnTime = now <= dueDate;
+  const GRACE_PERIOD_SECONDS = 30;
+  const gracePeriodEnd = new Date(dueDate.getTime() + GRACE_PERIOD_SECONDS * 1000);
+  const isOnTime = now <= gracePeriodEnd;
 
   const { data, error } = await supabase
     .from('loans')
