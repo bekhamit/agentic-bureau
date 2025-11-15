@@ -1,0 +1,34 @@
+{
+  "name": "agentic-bureau-borrower",
+  "version": "1.0.0",
+  "description": "Borrower agent that connects to Agentic Bureau MCP server to request payments",
+  "main": "borrower-agent.ts",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bekhamit/agentic-bureau.git"
+  },
+  "scripts": {
+    "start": "tsx borrower-agent.ts",
+    "dev": "tsx watch borrower-agent.ts"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "locus",
+    "payments",
+    "ai-agents",
+    "borrower"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

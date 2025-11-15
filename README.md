@@ -1,262 +1,168 @@
 # Agentic Bureau
 
-> **An MCP server that enables AI agents to make autonomous payments**
+> **Payment infrastructure for AI agents - Built on Locus**
 
 Agentic Bureau is a Model Context Protocol (MCP) server that acts as a payment bureau for AI agents. Built on [Locus](https://paywithlocus.com), it enables autonomous agents to send USDC payments on the Base blockchain securely and programmatically.
 
-## Features
+## Project Structure
 
-- **Send Payments**: Send USDC to any wallet address via the Locus payment infrastructure
-- **Payment Context**: Query budget status and whitelisted contacts
-- **Secure**: Uses Locus API for payment execution with built-in policy controls
-- **MCP Compatible**: Works with Claude Desktop and other MCP clients via stdio transport
+This repository contains two separate applications:
+
+```
+agentic-bureau/
+├── bureau-server/     # MCP server (deploy to Railway)
+│   ├── src/
+│   │   ├── http-server.ts
+│   │   └── locus-client.ts
+│   ├── package.json
+│   ├── .env.example
+│   └── README.md
+│
+├── borrower-agent/    # Borrower agent (run on laptops)
+│   ├── borrower-agent.ts
+│   ├── package.json
+│   ├── .env.example
+│   └── README.md
+│
+└── README.md         # This file
+```
+
+## Quick Start
+
+### Bureau Server (Deploy Once)
+
+The bureau server is the MCP server that handles payments via Locus.
+
+**Deploy to Railway:**
+
+1. Navigate to `bureau-server/` folder
+2. Follow the [bureau-server/README.md](bureau-server/README.md)
+3. Deploy to Railway with your Locus API key
+4. Get your Railway URL
+
+### Borrower Agent (Run on Each Laptop)
+
+The borrower agent connects to the bureau server to request payments.
+
+**Setup on each borrower laptop:**
+
+1. Navigate to `borrower-agent/` folder
+2. Follow the [borrower-agent/README.md](borrower-agent/README.md)
+3. Configure with bureau server URL
+4. Run to request payments
+
+## Demo Setup (Multi-Laptop)
+
+### Server Laptop (You)
+
+1. Deploy bureau server to Railway (once)
+2. Share the Railway URL with all borrowers
+
+### Borrower Laptops (Demo Participants)
+
+Each borrower:
+
+1. Clones the repository
+2. Opens `borrower-agent/` folder
+3. Runs `npm install`
+4. Creates `.env` with:
+   ```env
+   ANTHROPIC_API_KEY=their_own_api_key
+   BORROWER_WALLET_ADDRESS=their_wallet_address
+   BUREAU_MCP_URL=https://your-app.railway.app/mcp
+   ```
+5. Runs `npm start`
 
 ## Architecture
 
 ```
-MCP Client (Claude Desktop, etc.)
-        ↓ stdio
-Agentic Bureau MCP Server (this app)
-        ↓ HTTP
-Locus MCP Server (paywithlocus.com)
-        ↓ Base Blockchain
-USDC Transfer Executed
+Borrower Agent (Laptop 1)  ─┐
+Borrower Agent (Laptop 2)  ─┼──→  Bureau Server (Railway)
+Borrower Agent (Laptop 3)  ─┘           ↓
+                                  Locus MCP Server
+                                        ↓
+                                  Base Blockchain
+                                        ↓
+                                  USDC Transfers
 ```
+
+## Features
+
+- **Send Payments**: AI agents can send USDC to any wallet address
+- **Payment Context**: Query budget status and whitelisted contacts
+- **Secure**: Uses Locus API with built-in policy controls
+- **Multi-Client**: Supports multiple borrower agents connecting simultaneously
+- **Production-Ready**: Deployed on Railway with StreamableHTTPServerTransport
 
 ## Prerequisites
 
-1. **Locus Account**: Sign up at [app.paywithlocus.com](https://app.paywithlocus.com)
-2. **Locus API Key**: Get your API key from the Locus dashboard
-3. **Anthropic API Key**: Required for Claude Agent SDK (get from [console.anthropic.com](https://console.anthropic.com))
-4. **Funded Wallet**: Add USDC to your Locus wallet (Base Mainnet or Sepolia Testnet)
+### Bureau Server
 
-## Installation
+1. Locus Account: [app.paywithlocus.com](https://app.paywithlocus.com)
+2. Locus API Key from dashboard
+3. Anthropic API Key: [console.anthropic.com](https://console.anthropic.com)
+4. Funded Locus wallet with USDC (Base Mainnet or Sepolia)
 
-1. Clone the repository:
-```bash
-git clone https://github.com/bekhamit/agentic-bureau.git
-cd agentic-bureau
-```
+### Borrower Agent
 
-2. Install dependencies:
-```bash
-npm install
-```
+1. Anthropic API Key: [console.anthropic.com](https://console.anthropic.com)
+2. Personal wallet address (to receive payments)
+3. Bureau server URL (Railway deployment)
 
-3. Create a `.env` file:
-```bash
-cp .env.example .env
-```
+## Technology Stack
 
-4. Add your API keys to `.env`:
-```env
-LOCUS_API_KEY=your_locus_api_key_here
-ANTHROPIC_API_KEY=your_anthropic_api_key_here
-```
-
-## Running as MCP Server
-
-### Option 1: Local stdio (Single Computer)
-
-Run the MCP server directly:
-```bash
-npm run server
-```
-
-The server will start and communicate via stdio (standard input/output).
-
-### Option 2: HTTP Server (Multi-Computer / Demo)
-
-Run the MCP server as an HTTP service for multi-laptop demos:
-
-```bash
-npm run server:http
-```
-
-The server will start on `http://localhost:8080` by default.
-
-**For Demo/Hosting:**
-
-**Using ngrok (Quick Public URL):**
-```bash
-# Terminal 1: Start MCP server
-npm run server:http
-
-# Terminal 2: Expose publicly
-npx ngrok http 8080
-# Copy the https://xxx.ngrok.io URL
-```
-
-**Using Local Network (Same WiFi):**
-```bash
-# Find your local IP
-ipconfig getifaddr en0  # macOS
-# Or: hostname -I          # Linux
-
-# Start server
-npm run server:http
-
-# Other laptops connect to: http://YOUR_IP:8080/sse
-```
-
-**Configure Claude Desktop (for HTTP server):**
-```json
-{
-  "mcpServers": {
-    "agentic-bureau": {
-      "url": "http://localhost:8080/sse"
-      // or "https://your-ngrok-url.ngrok.io/sse"
-    }
-  }
-}
-```
-
-### Option 3: Configure with Claude Desktop (stdio)
-
-Add this server to your Claude Desktop configuration:
-
-**macOS**: `~/Library/Application Support/Claude/claude_desktop_config.json`
-**Windows**: `%APPDATA%/Claude/claude_desktop_config.json`
-
-```json
-{
-  "mcpServers": {
-    "agentic-bureau": {
-      "command": "node",
-      "args": [
-        "/absolute/path/to/agentic-bureau/node_modules/.bin/tsx",
-        "/absolute/path/to/agentic-bureau/src/server.ts"
-      ],
-      "env": {
-        "LOCUS_API_KEY": "your_locus_api_key_here",
-        "ANTHROPIC_API_KEY": "your_anthropic_api_key_here"
-      }
-    }
-  }
-}
-```
-
-**Important**: Replace `/absolute/path/to/agentic-bureau` with the actual absolute path to this directory.
-
-After adding the configuration:
-1. Restart Claude Desktop
-2. The Agentic Bureau server will be available as an MCP tool
-
-## Available Tools
-
-### 1. `send_payment`
-
-Send USDC to a wallet address.
-
-**Parameters:**
-- `wallet_address` (string, required): Destination wallet address (must start with `0x`)
-- `amount` (number, required): Amount of USDC to send (must be > 0)
-- `memo` (string, optional): Payment description/memo
-
-**Example usage in Claude Desktop:**
-```
-Send 0.01 USDC to wallet 0xe33e1171efeb28332aafc60cfa5b0e679f996235 with memo "Test payment"
-```
-
-### 2. `get_payment_context`
-
-Get your Locus payment context including budget status and whitelisted contacts.
-
-**Parameters:** None
-
-**Example usage in Claude Desktop:**
-```
-What's my Locus payment context?
-```
-
-## Testing the Server
-
-### Test with MCP Inspector
-
-Use the official MCP Inspector tool to test your server:
-
-```bash
-npx @modelcontextprotocol/inspector tsx src/server.ts
-```
-
-This will open a web interface where you can:
-- View available tools
-- Test tool execution
-- Inspect requests and responses
-
-### Test with the Sample Client
-
-You can also use the included test client (`index.ts`):
-
-```bash
-npm start
-```
-
-This runs a simple test that sends 0.01 USDC to a configured address.
-
-## Project Structure
-
-```
-agentic-bureau/
-├── src/
-│   ├── server.ts          # MCP server implementation
-│   └── locus-client.ts    # Locus payment client module
-├── index.ts               # Test client (optional)
-├── package.json
-├── .env                   # Your API keys (gitignored)
-├── .env.example           # Template for environment variables
-├── LICENSE
-└── README.md
-```
+- **MCP SDK**: `@modelcontextprotocol/sdk` - Model Context Protocol
+- **Claude SDK**: `@anthropic-ai/claude-agent-sdk` - AI agent framework
+- **Express**: HTTP server for MCP transport
+- **Locus**: Payment infrastructure for AI agents
+- **Base**: Ethereum L2 blockchain for USDC transfers
+- **TypeScript**: Type-safe development
 
 ## Security Considerations
 
-- **API Keys**: Never commit your `.env` file to version control
-- **Payment Limits**: Configure spending limits and policies in your Locus dashboard
-- **Wallet Management**: Use Locus policy groups to control agent spending behavior
-- **Audit Trail**: All transactions are logged and can be reviewed in your Locus dashboard
+- **API Keys**: Never commit `.env` files to version control
+- **Payment Limits**: Configure spending limits in Locus dashboard
+- **Wallet Management**: Use Locus policy groups to control spending
+- **Audit Trail**: All transactions are logged on Base blockchain
+- **Multi-Client**: Each borrower uses their own Anthropic API key
 
 ## Development
 
-### Running in Development Mode
+### Bureau Server
 
-Watch mode for the test client:
 ```bash
-npm run dev
+cd bureau-server
+npm install
+npm start
 ```
 
-### Type Checking
+### Borrower Agent
 
-Run TypeScript type checking:
 ```bash
-npm run type-check
+cd borrower-agent
+npm install
+npm start
 ```
 
-### Building
+## Deployment
 
-Compile TypeScript to JavaScript:
-```bash
-npm run build
-```
+### Bureau Server
 
-## Troubleshooting
+**Railway** (recommended):
+- Auto-deploys from GitHub
+- Uses `Procfile` for configuration
+- Set environment variables in Railway dashboard
 
-### "LOCUS_API_KEY not found"
-- Ensure your `.env` file exists and contains `LOCUS_API_KEY`
-- If using Claude Desktop, ensure the API key is in the `claude_desktop_config.json` env section
+### Borrower Agent
 
-### "Payment failed"
-- Check that your Locus wallet has sufficient USDC balance
-- Verify the recipient wallet address is valid (starts with `0x`, 42 characters)
-- Check Locus dashboard for any policy restrictions
-
-### "Connection refused" or MCP errors
-- Ensure you're running the latest version of Claude Desktop
-- Check that the absolute path in `claude_desktop_config.json` is correct
-- Restart Claude Desktop after configuration changes
+- No deployment needed
+- Run locally on each demo laptop
+- Each instance configured independently
 
 ## Learn More
 
+- [Bureau Server Documentation](bureau-server/README.md)
+- [Borrower Agent Documentation](borrower-agent/README.md)
 - [Locus Documentation](https://docs.paywithlocus.com)
 - [Model Context Protocol](https://modelcontextprotocol.io)
 - [Claude Desktop MCP Guide](https://docs.anthropic.com/claude/docs/model-context-protocol)
@@ -264,9 +170,10 @@ npm run build
 ## Support
 
 For issues with:
-- **Locus**: Contact founders@paywithlocus.com or join their Discord
-- **MCP Protocol**: Visit [modelcontextprotocol.io](https://modelcontextprotocol.io)
-- **This Server**: Open an issue in this repository
+- **Bureau Server**: See [bureau-server/README.md](bureau-server/README.md)
+- **Borrower Agent**: See [borrower-agent/README.md](borrower-agent/README.md)
+- **Locus**: Contact founders@paywithlocus.com
+- **This Project**: Open an issue on GitHub
 
 ## License
 

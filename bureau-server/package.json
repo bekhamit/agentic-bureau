@@ -1,0 +1,41 @@
+{
+  "name": "agentic-bureau-server",
+  "version": "1.0.0",
+  "description": "MCP server that enables AI agents to make payments via Locus",
+  "main": "src/http-server.ts",
+  "type": "module",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bekhamit/agentic-bureau.git"
+  },
+  "scripts": {
+    "start": "tsx src/http-server.ts",
+    "dev": "tsx watch src/http-server.ts",
+    "build": "tsc",
+    "type-check": "tsc --noEmit"
+  },
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "locus",
+    "payments",
+    "ai-agents",
+    "usdc",
+    "blockchain",
+    "base"
+  ],
+  "author": "",
+  "license": "MIT",
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.1.0",
+    "@modelcontextprotocol/sdk": "^1.22.0",
+    "@types/express": "^5.0.5",
+    "dotenv": "^16.4.5",
+    "express": "^5.1.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
