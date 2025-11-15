@@ -241,18 +241,13 @@ export async function updateLoanRepayment(
 
   const newAmountRepaid = loan.amount_repaid + repaymentAmount;
   const isFullyRepaid = newAmountRepaid >= loan.total_due;
-  const now = new Date();
-  const dueDate = new Date(loan.due_date);
-  const GRACE_PERIOD_SECONDS = 30;
-  const gracePeriodEnd = new Date(dueDate.getTime() + GRACE_PERIOD_SECONDS * 1000);
-  const isOnTime = now <= gracePeriodEnd;
 
   const { data, error } = await supabase
     .from('loans')
     .update({
       amount_repaid: newAmountRepaid,
       status: isFullyRepaid ? 'repaid' : 'active',
-      repaid_at: isFullyRepaid ? now.toISOString() : null,
+      repaid_at: isFullyRepaid ? new Date().toISOString() : null,
     })
     .eq('id', loanId)
     .select()
@@ -260,15 +255,9 @@ export async function updateLoanRepayment(
 
   if (error) throw error;
 
-  // Update credit score if fully repaid
+  // Update credit score if fully repaid: +2 points
   if (isFullyRepaid) {
-    if (isOnTime) {
-      // Successful on-time repayment: +2 points
-      await updateCreditScore(loan.wallet_address, 2);
-    } else {
-      // Late repayment: -10 points
-      await updateCreditScore(loan.wallet_address, -10);
-    }
+    await updateCreditScore(loan.wallet_address, 2);
   }
 
   return data as Loan;
