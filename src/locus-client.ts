@@ -71,7 +71,7 @@ export async function sendPayment(
     })) {
       if (message.type === 'result' && message.subtype === 'success') {
         paymentResult = (message as any).result;
-      } else if (message.type === 'result' && message.subtype === 'error') {
+      } else if (message.type === 'result' && message.subtype.startsWith('error')) {
         error = (message as any).error;
       }
     }
