@@ -14,9 +14,17 @@ ADD COLUMN IF NOT EXISTS github_last_synced TIMESTAMP WITH TIME ZONE;
 CREATE INDEX IF NOT EXISTS idx_agents_github_username 
 ON agents(github_username) WHERE github_username IS NOT NULL;
 
--- Add unique constraint to prevent duplicate GitHub accounts
-ALTER TABLE agents
-ADD CONSTRAINT unique_github_username UNIQUE (github_username);
+-- Add unique constraint to prevent duplicate GitHub accounts (idempotent)
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM information_schema.table_constraints 
+    WHERE constraint_name = 'unique_github_username' 
+    AND table_name = 'agents'
+  ) THEN
+    ALTER TABLE agents ADD CONSTRAINT unique_github_username UNIQUE (github_username);
+  END IF;
+END $$;
 
 -- Add comments for documentation
 COMMENT ON COLUMN agents.github_username IS 'GitHub username bound to this agent wallet';
