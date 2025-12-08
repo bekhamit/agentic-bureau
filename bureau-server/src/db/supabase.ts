@@ -9,6 +9,12 @@ export interface Agent {
   available_credit: number;
   created_at: string;
   updated_at: string;
+  // GitHub identity fields
+  github_username?: string | null;
+  github_verified?: boolean;
+  github_profile_url?: string | null;
+  github_contribution_count?: number;
+  github_last_synced?: string | null;
 }
 
 export interface Loan {
@@ -313,4 +319,105 @@ export async function getTransactionsByWallet(walletAddress: string): Promise<Tr
 
   if (error) throw error;
   return (data as Transaction[]) || [];
+}
+
+// ========== GitHub Identity Operations ==========
+
+/**
+ * Bind GitHub username to agent wallet
+ * @param walletAddress - Agent's wallet address
+ * @param githubUsername - GitHub username to bind
+ * @param profileUrl - Optional GitHub profile URL (auto-generated if not provided)
+ * @returns Updated agent with GitHub identity
+ */
+export async function bindGitHubToAgent(
+  walletAddress: string,
+  githubUsername: string,
+  profileUrl?: string
+): Promise<Agent> {
+  const supabase = getSupabase();
+
+  // Check if GitHub username is already bound to another wallet
+  const { data: existing } = await supabase
+    .from('agents')
+    .select('wallet_address')
+    .eq('github_username', githubUsername)
+    .maybeSingle();
+
+  if (existing && existing.wallet_address !== walletAddress) {
+    throw new Error(`GitHub username ${githubUsername} is already bound to wallet ${existing.wallet_address}`);
+  }
+
+  const { data, error } = await supabase
+    .from('agents')
+    .update({
+      github_username: githubUsername,
+      github_verified: true,
+      github_profile_url: profileUrl || `https://github.com/${githubUsername}`,
+      github_last_synced: new Date().toISOString(),
+    })
+    .eq('wallet_address', walletAddress)
+    .select()
+    .single();
+
+  if (error) throw error;
+  return data as Agent;
+}
+
+/**
+ * Update GitHub contribution count for an agent
+ * @param walletAddress - Agent's wallet address
+ * @param contributionCount - Total contributions from GitHub
+ */
+export async function updateGitHubContributions(
+  walletAddress: string,
+  contributionCount: number
+): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('agents')
+    .update({
+      github_contribution_count: contributionCount,
+      github_last_synced: new Date().toISOString(),
+    })
+    .eq('wallet_address', walletAddress);
+
+  if (error) throw error;
+}
+
+/**
+ * Unbind GitHub account from agent wallet
+ * @param walletAddress - Agent's wallet address
+ */
+export async function unbindGitHubFromAgent(walletAddress: string): Promise<void> {
+  const supabase = getSupabase();
+  const { error } = await supabase
+    .from('agents')
+    .update({
+      github_username: null,
+      github_verified: false,
+      github_profile_url: null,
+      github_contribution_count: 0,
+      github_last_synced: null,
+    })
+    .eq('wallet_address', walletAddress);
+
+  if (error) throw error;
+}
+
+/**
+ * Get agent by GitHub username
+ * @param githubUsername - GitHub username to search for
+ * @returns Agent if found, null otherwise
+ */
+export async function getAgentByGitHub(githubUsername: string): Promise<Agent | null> {
+  const supabase = getSupabase();
+  const { data, error } = await supabase
+    .from('agents')
+    .select('*')
+    .eq('github_username', githubUsername)
+    .maybeSingle();
+
+  if (error) throw error;
+  return data as Agent | null;
 }

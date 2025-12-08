@@ -19,7 +19,16 @@ import {
   updateLoanRepayment,
   createTransaction,
   updateAgentBorrowing,
+  bindGitHubToAgent,
+  updateGitHubContributions as updateGitHubContributionsDB,
+  unbindGitHubFromAgent,
+  getAgentByGitHub,
 } from './db/supabase.js';
+import {
+  verifyGitHubUsername,
+  fetchGitHubContributions,
+  getGitHubProfileUrl,
+} from './github-client.js';
 
 /**
  * Agentic Bureau MCP Server (HTTP/Streamable Transport)
@@ -559,3 +568,15 @@ app.listen(PORT, () => {
   console.log('Ready to accept connections from MCP clients');
   console.log('Using StreamableHTTPServerTransport (SDK recommended)');
 });
+// Add GitHub client imports at the top (after existing imports)
+import {
+  verifyGitHubUsername,
+  fetchGitHubContributions,
+  getGitHubProfileUrl,
+} from './github-client.js';
+import {
+  bindGitHubToAgent,
+  updateGitHubContributions as updateGitHubContributionsDB,
+  unbindGitHubFromAgent,
+  getAgentByGitHub,
+} from './db/supabase.js';
