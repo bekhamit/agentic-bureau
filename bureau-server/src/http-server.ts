@@ -19,7 +19,16 @@ import {
   updateLoanRepayment,
   createTransaction,
   updateAgentBorrowing,
+  bindGitHubToAgent,
+  updateGitHubContributions as updateGitHubContributionsDB,
+  unbindGitHubFromAgent,
+  getAgentByGitHub,
 } from './db/supabase.js';
+import {
+  verifyGitHubUsername,
+  fetchGitHubContributions,
+  getGitHubProfileUrl,
+} from './github-client.js';
 
 /**
  * Agentic Bureau MCP Server (HTTP/Streamable Transport)
